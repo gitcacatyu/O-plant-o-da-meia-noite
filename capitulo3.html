@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#08090b">
+  <title>Plantão da Meia-Noite · Capítulo 3: O Sótão</title>
+  <style>
+    :root { color-scheme: dark; font-family: "Courier New", monospace; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #050607; color: #e8e4df; }
+    body { display: grid; place-items: center; }
+    #game { position: relative; width: 100vw; height: 100vh; overflow: hidden; background: #090a0b; }
+    canvas { display: block; width: 100%; height: 100%; }
+    #hud { position: absolute; inset: 0; pointer-events: none; text-shadow: 0 2px 8px #000; }
+    .topline { position: absolute; top: 22px; left: 25px; right: 25px; display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+    .brand { color: #b9b2a8; font-size: 11px; letter-spacing: .24em; }
+    #objective { margin-top: 9px; color: #f0e9df; font-size: 13px; letter-spacing: .08em; }
+    #status { display: grid; gap: 6px; width: min(185px,42vw); margin-top: 9px; }
+    .status-row { display: grid; grid-template-columns: 58px 1fr 25px; align-items: center; gap: 6px; color: #aaa49a; font-size: 9px; letter-spacing: .08em; }
+    .bar { height: 5px; border: 1px solid #3a3834; background: #242322; }
+    .fill { display: block; width: 100%; height: 100%; background: #8eaa9c; transition: width .15s; }
+    #staminaFill { background: #a48b5e; }
+    #inventory { color: #c7bda9; font-size: 10px; text-align: right; letter-spacing: .06em; }
+    #message { position: absolute; top: 19%; left: 50%; transform: translateX(-50%); width: min(90%,650px); text-align: center; color: #eee4da; font-size: clamp(14px,2vw,20px); letter-spacing: .13em; opacity: 0; transition: opacity .3s; }
+    #prompt { position: absolute; left: 50%; bottom: 13%; transform: translateX(-50%); color: #e6dfd3; font-size: 12px; letter-spacing: .12em; opacity: 0; text-align: center; }
+    #recording { position: absolute; inset: 0; z-index: 1; pointer-events: none; border: 1px solid rgba(210,220,211,.16); }
+    #recording::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(to bottom,transparent 0 3px,rgba(0,0,0,.18) 4px); }
+    .rec-label { position: absolute; z-index: 1; right: 25px; bottom: 22px; color: #e3ded5; font-size: 11px; letter-spacing: .12em; }
+    .rec-dot { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: #d42f32; box-shadow: 0 0 9px #d42f32; }
+    .screen { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; overflow-y: auto; padding: 24px; background: radial-gradient(ellipse at 68% 50%,rgba(47,51,48,.84),rgba(2,3,4,.97) 74%); text-align: center; }
+    .screen[hidden] { display: none; }
+    .card { width: min(100%,720px); padding: clamp(14px,4vw,42px); }
+    .eyebrow { color: #a78b78; font-size: 11px; letter-spacing: .32em; }
+    h1 { margin: 18px 0; font-size: clamp(40px,8vw,78px); font-weight: 400; letter-spacing: .09em; line-height: .96; }
+    h2 { font-size: clamp(28px,6vw,52px); font-weight: 400; letter-spacing: .1em; }
+    .sub { color: #b7b1a7; font-size: 14px; line-height: 1.8; }
+    .controls { margin: 24px 0; color: #c0bbb3; line-height: 1.9; font-size: 12px; }
+    button, .back-link { display: inline-block; border: 1px solid #8f7765; background: #211c19; color: #eee6dc; padding: 14px 22px; font: inherit; letter-spacing: .16em; text-decoration: none; cursor: pointer; }
+    button:hover, .back-link:hover { background: #604735; }
+    .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 24px; }
+    .actions button { min-width: 220px; }
+    #crosshair { position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; border: 1px solid #d7d2c9; border-radius: 50%; opacity: .7; transform: translate(-50%,-50%); }
+    @media (max-width: 600px) { .topline { top: 14px; left: 14px; right: 14px; } #objective { font-size: 11px; } }
+  </style>
+</head>
+<body>
+  <main id="game">
+    <canvas id="view" aria-label="Visão em primeira pessoa do sótão do hospital"></canvas>
+    <div id="hud">
+      <div class="topline">
+        <div>
+          <div class="brand">HOSPITAL SANTA VITÓRIA · SÓTÃO</div>
+          <div id="objective">ENCONTRE LIA · FUJA DA CRIATURA</div>
+          <div id="status">
+            <div class="status-row"><span>BATERIA</span><div class="bar"><span class="fill" id="batteryFill"></span></div><span id="batteryText">100</span></div>
+            <div class="status-row"><span>FÔLEGO</span><div class="bar"><span class="fill" id="staminaFill"></span></div><span id="staminaText">100</span></div>
+          </div>
+        </div>
+        <div id="inventory">BATERIAS [R] <span id="spareCount">0</span><br>ÁREA DO SÓTÃO · 2304 m²</div>
+      </div>
+      <div id="message"></div><div id="crosshair"></div><div id="prompt"></div>
+    </div>
+    <div id="recording"><div class="rec-label"><span class="rec-dot"></span>REC · CAM 03</div></div>
+    <section class="screen" id="start">
+      <div class="card">
+        <div class="eyebrow">PLANTÃO DA MEIA-NOITE · CAPÍTULO FINAL</div>
+        <h1>O SÓTÃO</h1>
+        <p class="sub">Depois daquela tarde escura, já era madrugada. Do primeiro pavimento, você escutou um grito:</p>
+        <p class="sub"><em>“Aaaaah! Socorro, Pedro!”</em></p>
+        <p class="sub">Você reconheceu a voz: era a da sua irmã. Ela estava lá no sótão do hospital. Você não acreditou no que ouviu, mas foi até lá.</p>
+        <p class="sub">O sótão tem mais de dois mil metros quadrados, com salas de armazenamento e manutenção ligadas por corredores. Encontre sua irmã enquanto a criatura já está à sua caça e fuja por uma das saídas.</p>
+        <div class="controls">W A S D — andar · ← → ou mouse — olhar<br>F — lanterna · R — trocar bateria · SHIFT — correr · E — interagir · ESC — pausar</div>
+        <div class="actions"><button id="begin">SUBIR AO SÓTÃO</button><a class="back-link" href="capitulo2.html">VOLTAR AO CAPÍTULO 2</a><a class="back-link" href="index.html">VOLTAR AO CAPÍTULO 1</a></div>
+      </div>
+    </section>
+    <section class="screen" id="pause" hidden>
+      <div class="card"><div class="eyebrow">SINAL INTERROMPIDO · CAM 03</div><h2>GRAVAÇÃO PAUSADA</h2><div class="actions"><button id="resume">RETOMAR</button><a class="back-link" href="capitulo2.html">VOLTAR AO CAPÍTULO 2</a></div></div>
+    </section>
+    <section class="screen" id="ending" hidden>
+      <div class="card"><div class="eyebrow">FIM DA GRAVAÇÃO · CAPÍTULO FINAL</div><h2 id="endingTitle">VOCÊ A ENCONTROU</h2><p class="sub" id="endingText"></p><div class="actions"><button id="restart">JOGAR DE NOVO</button><a class="back-link" href="capitulo2.html">VOLTAR AO CAPÍTULO 2</a><a class="back-link" href="index.html">MENU PRINCIPAL</a></div></div>
+    </section>
+  </main>
+<script>
+(() => {
+  "use strict";
+  const canvas=document.getElementById("view"),ctx=canvas.getContext("2d");
+  const objectiveEl=document.getElementById("objective"),messageEl=document.getElementById("message");
+  const promptEl=document.getElementById("prompt"),startEl=document.getElementById("start");
+  const pauseEl=document.getElementById("pause"),endingEl=document.getElementById("ending");
+  const batteryFill=document.getElementById("batteryFill"),batteryText=document.getElementById("batteryText");
+  const staminaFill=document.getElementById("staminaFill"),staminaText=document.getElementById("staminaText");
+  const spareCountEl=document.getElementById("spareCount");
+  const MAP_W=48,MAP_H=48,FOV=Math.PI/3.5;
+  const map=Array.from({length:MAP_H},()=>Array(MAP_W).fill("#"));
+  const rng=(()=>{
+    let seed=384731;
+    return()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
+  })();
+  const exits=[{x:0,y:12,label:"ESCADA OESTE"},{x:MAP_W-1,y:35,label:"ESCADA LESTE"}];
+  const rooms=[1,17,33];
+  for(const roomY of rooms)for(const roomX of rooms){
+    for(let y=roomY;y<Math.min(roomY+13,MAP_H-1);y++)
+      for(let x=roomX;x<Math.min(roomX+13,MAP_W-1);x++)map[y][x]=".";
+  }
+  for(const roomY of rooms){
+    const passageY=roomY+4;
+    for(const roomX of [14,30])for(let y=passageY;y<passageY+5;y++)
+      for(let x=roomX;x<roomX+3;x++)map[y][x]=".";
+  }
+  for(const roomX of rooms){
+    const passageX=roomX+4;
+    for(const roomY of [14,30])for(let y=roomY;y<roomY+3;y++)
+      for(let x=passageX;x<passageX+5;x++)map[y][x]=".";
+  }
+  for(let y=10;y<=14;y++)for(let x=0;x<=2;x++)map[y][x]=".";
+  for(let y=33;y<=37;y++)for(let x=MAP_W-3;x<MAP_W;x++)map[y][x]=".";
+  map[12][0]=".";map[12][1]=".";
+  map[35][MAP_W-1]=".";map[35][MAP_W-2]=".";
+  const player={x:3.5,y:3.5,angle:.2,bob:0};
+  const sister={x:43.5,y:43.5,found:false};
+  const openCells=[];
+  for(let y=1;y<MAP_H-1;y++)for(let x=1;x<MAP_W-1;x++)if(map[y][x]===".")
+    openCells.push({x:x+.5,y:y+.5});
+  const batteries=[];
+  for(let i=0;i<4;i++){
+    const candidates=openCells.filter(point=>Math.hypot(point.x-player.x,point.y-player.y)>6&&
+      Math.hypot(point.x-sister.x,point.y-sister.y)>3&&!batteries.some(item=>Math.hypot(point.x-item.x,point.y-item.y)<4));
+    if(!candidates.length)throw new Error("Não foi possível posicionar as baterias do sótão.");
+    batteries.push({...candidates[Math.floor(rng()*candidates.length)],found:false});
+  }
+  const monsterCell=openCells.filter(point=>Math.hypot(point.x-player.x,point.y-player.y)>15&&
+    Math.hypot(point.x-sister.x,point.y-sister.y)>8).sort((a,b)=>
+      Math.hypot(b.x-player.x,b.y-player.y)-Math.hypot(a.x-player.x,a.y-player.y))[0];
+  if(!monsterCell)throw new Error("Não foi possível posicionar a criatura no sótão.");
+  const monster={...monsterCell},keys=new Set();
+  let W=640,H=360,running=false,ended=false,flashlight=true,battery=100,spareBatteries=0,stamina=100;
+  let messageTimer=0,pathTimer=0,monsterPath=null,monsterDistance=Infinity,last=0;
+  let audio=null,master=null,breathBuffer=null,breathTimer=0,ambientTimer=5,roarTimer=0,pointerLocked=false;
+  const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
+  const normAngle=a=>Math.atan2(Math.sin(a),Math.cos(a));
+  function resize(){const scale=Math.min(1,1280/innerWidth);W=Math.max(320,Math.floor(innerWidth*scale));H=Math.max(180,Math.floor(innerHeight*scale));canvas.width=W;canvas.height=H;}
+  addEventListener("resize",resize);resize();
+  function wallAt(x,y){const mx=Math.floor(x),my=Math.floor(y);return mx<0||mx>=MAP_W||my<0||my>=MAP_H||map[my][mx]==="#";}
+  function move(entity,dx,dy,radius=.16){
+    if(!wallAt(entity.x+dx+Math.sign(dx)*radius,entity.y))entity.x+=dx;
+    if(!wallAt(entity.x,entity.y+dy+Math.sign(dy)*radius))entity.y+=dy;
+  }
+  function raycast(angle){
+    const dx=Math.cos(angle),dy=Math.sin(angle);let mx=Math.floor(player.x),my=Math.floor(player.y);
+    const deltaX=Math.abs(1/dx),deltaY=Math.abs(1/dy),stepX=dx<0?-1:1,stepY=dy<0?-1:1;
+    let sideX=(dx<0?player.x-mx:mx+1-player.x)*deltaX,sideY=(dy<0?player.y-my:my+1-player.y)*deltaY,side=0;
+    for(let i=0;i<MAP_W+MAP_H;i++){
+      if(sideX<sideY){sideX+=deltaX;mx+=stepX;side=0;}else{sideY+=deltaY;my+=stepY;side=1;}
+      if(wallAt(mx+.1,my+.1))break;
+    }
+    const dist=Math.max(.08,side===0?sideX-deltaX:sideY-deltaY),hit=side===0?player.y+dist*dy:player.x+dist*dx;
+    return{dist,side,tex:hit-Math.floor(hit),mx,my};
+  }
+  function findMonsterPath(){
+    const start=Math.floor(monster.y)*MAP_W+Math.floor(monster.x);
+    const target=Math.floor(player.y)*MAP_W+Math.floor(player.x);
+    const previous=new Int32Array(MAP_W*MAP_H);previous.fill(-2);
+    const queue=[start];previous[start]=-1;
+    for(let head=0;head<queue.length&&previous[target]===-2;head++){
+      const current=queue[head],x=current%MAP_W,y=Math.floor(current/MAP_W);
+      for(const [nx,ny] of [[x+1,y],[x-1,y],[x,y+1],[x,y-1]]){
+        if(nx<0||nx>=MAP_W||ny<0||ny>=MAP_H||map[ny][nx]==="#")continue;
+        const next=ny*MAP_W+nx;if(previous[next]===-2){previous[next]=current;queue.push(next);}
+      }
+    }
+    if(previous[target]===-2)return null;
+    let step=target;while(previous[step]!==start&&previous[step]!==-1)step=previous[step];
+    return{x:step%MAP_W+.5,y:Math.floor(step/MAP_W)+.5};
+  }
+  function showMessage(text,duration=2.5){messageEl.textContent=text;messageEl.style.opacity="1";messageTimer=duration;}
+  function updateHud(){
+    batteryFill.style.width=`${battery}%`;batteryText.textContent=`${Math.ceil(battery)}`;
+    batteryFill.style.background=battery<20?"#bd6862":"#8eaa9c";
+    staminaFill.style.width=`${stamina}%`;staminaText.textContent=`${Math.ceil(stamina)}`;
+    spareCountEl.textContent=spareBatteries;
+  }
+  function startAudio(){
+    const AudioContext=window.AudioContext||window.webkitAudioContext;
+    if(!AudioContext){console.warn("Este navegador não oferece suporte ao áudio do jogo.");return;}
+    if(audio){if(audio.state==="suspended")audio.resume().catch(error=>console.warn("Não foi possível retomar o áudio:",error));return;}
+    audio=new AudioContext();master=audio.createGain();master.gain.value=.78;master.connect(audio.destination);
+    const drone=audio.createOscillator(),droneFilter=audio.createBiquadFilter(),droneGain=audio.createGain();
+    drone.type="sawtooth";drone.frequency.value=34;droneFilter.type="lowpass";droneFilter.frequency.value=90;
+    droneGain.gain.value=.2;drone.connect(droneFilter).connect(droneGain).connect(master);drone.start();
+    const lfo=audio.createOscillator(),lfoGain=audio.createGain();lfo.frequency.value=.11;lfoGain.gain.value=9;
+    lfo.connect(lfoGain).connect(drone.frequency);lfo.start();
+    const noiseBuffer=audio.createBuffer(1,audio.sampleRate*2,audio.sampleRate),samples=noiseBuffer.getChannelData(0);
+    for(let i=0;i<samples.length;i++)samples[i]=(Math.random()*2-1)*.4;
+    const noise=audio.createBufferSource(),filter=audio.createBiquadFilter(),gain=audio.createGain();
+    noise.buffer=noiseBuffer;noise.loop=true;filter.type="bandpass";filter.frequency.value=260;gain.gain.value=.035;
+    noise.connect(filter).connect(gain).connect(master);noise.start();
+    breathBuffer=audio.createBuffer(1,Math.floor(audio.sampleRate*.7),audio.sampleRate);
+    const breathSamples=breathBuffer.getChannelData(0);for(let i=0;i<breathSamples.length;i++)breathSamples[i]=(Math.random()*2-1)*.55;
+  }
+  function tone(frequency,duration=.6,type="sine",volume=.15,slide=0){
+    if(!audio||audio.state!=="running")return;
+    const oscillator=audio.createOscillator(),gain=audio.createGain(),now=audio.currentTime;
+    oscillator.type=type;oscillator.frequency.setValueAtTime(frequency,now);
+    if(slide)oscillator.frequency.exponentialRampToValueAtTime(Math.max(18,frequency+slide),now+duration);
+    gain.gain.setValueAtTime(volume,now);gain.gain.exponentialRampToValueAtTime(.001,now+duration);
+    oscillator.connect(gain).connect(master);oscillator.start(now);oscillator.stop(now+duration);
+  }
+  function breathing(intensity){
+    if(!audio||audio.state!=="running"||!breathBuffer)return;
+    const source=audio.createBufferSource(),filter=audio.createBiquadFilter(),gain=audio.createGain(),now=audio.currentTime;
+    source.buffer=breathBuffer;filter.type="bandpass";filter.frequency.value=300;
+    gain.gain.setValueAtTime(.001,now);gain.gain.linearRampToValueAtTime(.025+intensity*.04,now+.12);
+    gain.gain.exponentialRampToValueAtTime(.001,now+.65);source.connect(filter).connect(gain).connect(master);
+    source.start(now);source.stop(now+.7);
+  }
+  function drawMonster(p,now,horizon){
+    const size=clamp(p.scale*.9,12,H*1.7),cx=p.sx,hover=Math.sin(now/190)*size*.035,base=horizon+size*.2+hover;
+    const top=base-size*.9;
+    ctx.save();ctx.globalAlpha=clamp(1-p.distance/20,.3,.98);
+    ctx.shadowColor="#000";ctx.shadowBlur=clamp(18-p.distance,4,18);
+    const silhouette=ctx.createRadialGradient(cx,top+size*.35,1,cx,top+size*.48,size*.42);
+    silhouette.addColorStop(0,"#09090a");silhouette.addColorStop(.72,"#020203");silhouette.addColorStop(1,"rgba(0,0,0,0)");
+    ctx.fillStyle=silhouette;ctx.beginPath();
+    ctx.moveTo(cx,top);
+    ctx.bezierCurveTo(cx+size*.24,top-size*.015,cx+size*.29,top+size*.19,cx+size*.23,top+size*.42);
+    ctx.bezierCurveTo(cx+size*.2,top+size*.62,cx+size*.12,top+size*.73,cx+size*.1,base);
+    ctx.quadraticCurveTo(cx,base-size*.07,cx-size*.1,base);
+    ctx.bezierCurveTo(cx-size*.12,top+size*.73,cx-size*.2,top+size*.62,cx-size*.23,top+size*.42);
+    ctx.bezierCurveTo(cx-size*.29,top+size*.19,cx-size*.24,top-size*.015,cx,top);
+    ctx.closePath();ctx.fill();
+    ctx.shadowColor="#ff1726";ctx.shadowBlur=16;ctx.fillStyle="#f01424";
+    for(const side of [-1,1]){
+      ctx.beginPath();ctx.ellipse(cx+side*size*.065,top+size*.35,size*.019,size*.027,0,0,Math.PI*2);ctx.fill();
+    }
+    ctx.restore();
+  }
+  function drawSister(p,now,horizon){
+    const size=clamp(p.scale*.36,12,H*.9),cx=p.sx,base=horizon+size*.95+Math.sin(now/520)*size*.008;
+    ctx.save();ctx.globalAlpha=clamp(1-p.distance/16,.45,1);
+    ctx.fillStyle="rgba(0,0,0,.4)";ctx.beginPath();ctx.ellipse(cx,base,size*.23,size*.045,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="#22201d";ctx.beginPath();ctx.moveTo(cx-size*.14,base-size*.5);
+    ctx.quadraticCurveTo(cx-size*.18,base-size*.25,cx-size*.16,base);ctx.lineTo(cx+size*.16,base);
+    ctx.quadraticCurveTo(cx+size*.18,base-size*.25,cx+size*.14,base-size*.5);ctx.closePath();ctx.fill();
+    ctx.fillStyle="#302720";ctx.beginPath();ctx.ellipse(cx,base-size*.58,size*.11,size*.14,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="#a77c63";ctx.beginPath();ctx.ellipse(cx,base-size*.58,size*.075,size*.11,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="#32231e";ctx.beginPath();ctx.arc(cx,base-size*.62,size*.085,Math.PI,Math.PI*2);
+    ctx.lineTo(cx+size*.08,base-size*.49);ctx.quadraticCurveTo(cx+size*.03,base-size*.54,cx-size*.08,base-size*.5);ctx.closePath();ctx.fill();
+    ctx.fillStyle="#251d19";ctx.fillRect(cx-size*.038,base-size*.59,size*.018,size*.01);ctx.fillRect(cx+size*.02,base-size*.59,size*.018,size*.01);
+    ctx.strokeStyle="#806252";ctx.lineWidth=Math.max(1,size*.008);ctx.beginPath();ctx.moveTo(cx-size*.018,base-size*.53);ctx.lineTo(cx+size*.018,base-size*.53);ctx.stroke();
+    ctx.fillStyle="#1d1918";ctx.fillRect(cx-size*.12,base-size*.44,size*.24,size*.18);
+    for(const side of [-1,1]){
+      ctx.strokeStyle="#a77c63";ctx.lineWidth=size*.035;ctx.lineCap="round";
+      ctx.beginPath();ctx.moveTo(cx+side*size*.115,base-size*.4);ctx.lineTo(cx+side*size*.19,base-size*.16);ctx.stroke();
+      ctx.strokeStyle="#292321";ctx.lineWidth=size*.075;
+      ctx.beginPath();ctx.moveTo(cx+side*size*.065,base-size*.27);ctx.lineTo(cx+side*size*.08,base+size*.015);ctx.stroke();
+      ctx.strokeStyle="#4a3730";ctx.lineWidth=size*.012;
+      ctx.beginPath();ctx.moveTo(cx+side*size*.1,base-size*.25);ctx.lineTo(cx+side*size*.11,base-size*.04);ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function draw(now){
+    const fear=Number.isFinite(monsterDistance)?clamp((10-monsterDistance)/9,0,1):0;
+    const finalHunt=sister.found,shake=fear*(finalHunt?12:5);
+    ctx.save();if(shake>0)ctx.translate((Math.random()-.5)*shake*2,(Math.random()-.5)*shake*2);
+    const horizon=H*.49+Math.sin(player.bob)*2;
+    const ceiling=ctx.createLinearGradient(0,0,0,horizon);ceiling.addColorStop(0,"#030304");ceiling.addColorStop(1,"#11100f");ctx.fillStyle=ceiling;ctx.fillRect(0,0,W,horizon);
+    const floor=ctx.createLinearGradient(0,horizon,0,H);floor.addColorStop(0,"#100f0e");floor.addColorStop(1,"#020202");ctx.fillStyle=floor;ctx.fillRect(0,horizon,W,H-horizon);
+    const depth=new Float32Array(W);
+    for(let x=0;x<W;x+=2){
+      const angle=player.angle+(x/W-.5)*FOV,hit=raycast(angle),dist=hit.dist*Math.cos(angle-player.angle);
+      const wallHeight=Math.min(H*2,H/(dist*.76)),top=horizon-wallHeight/2;depth[x]=depth[x+1]=dist;
+      const beamAngle=Math.abs(normAngle(angle-player.angle));
+      const beam=flashlight?Math.pow(Math.max(0,1-beamAngle/.46),2)*Math.max(0,1-dist/9)*(battery<15?.55+.45*Math.max(0,Math.sin(now/75)):battery/100):0;
+      const texture=.8+Math.abs(Math.sin(hit.tex*23+hit.mx*7+hit.my*11))*.2;
+      const shade=clamp((.012+.075*Math.max(0,1-dist/30)+beam*.8)*(hit.side?.72:1)*texture,.025,.92);
+      ctx.fillStyle=`rgb(${Math.floor(113*shade)},${Math.floor(108*shade)},${Math.floor(101*shade)})`;ctx.fillRect(x,top,2,wallHeight);
+      const crack=Math.abs(Math.sin(hit.mx*81.3+hit.my*31.7+hit.tex*90));
+      if(crack>.965&&wallHeight>30){
+        ctx.strokeStyle=`rgba(18,16,15,${.8*shade})`;ctx.lineWidth=1;ctx.beginPath();
+        ctx.moveTo(x,top+wallHeight*.18);ctx.lineTo(x+1,top+wallHeight*.29);
+        ctx.lineTo(x,top+wallHeight*.42);ctx.lineTo(x+1,top+wallHeight*.56);ctx.stroke();
+      }
+      if(beam>.05){ctx.fillStyle=`rgba(210,205,186,${beam*.08})`;ctx.fillRect(x,top,2,wallHeight);}
+    }
+    if(flashlight){
+      const glow=ctx.createRadialGradient(W*.5,horizon+H*.08,1,W*.5,horizon+H*.18,H*.58);
+      glow.addColorStop(0,`rgba(216,207,178,${.075*battery/100})`);glow.addColorStop(.4,"rgba(180,174,151,.025)");glow.addColorStop(1,"rgba(0,0,0,0)");
+      ctx.fillStyle=glow;ctx.fillRect(0,horizon,W,H-horizon);
+    }
+    const sprites=[
+      ...batteries.filter(item=>!item.found).map(item=>({...item,type:"battery"})),
+      {...exits[0],x:exits[0].x+.55,y:exits[0].y+.5,type:"exit"},
+      {...exits[1],x:exits[1].x-.55,y:exits[1].y+.5,type:"exit"}
+    ];
+    if(!sister.found)sprites.push({...sister,type:"sister"});
+    sprites.push({...monster,type:"monster"});
+    sprites.sort((a,b)=>Math.hypot(b.x-player.x,b.y-player.y)-Math.hypot(a.x-player.x,a.y-player.y));
+    for(const sprite of sprites){
+      const dx=sprite.x-player.x,dy=sprite.y-player.y,distance=Math.hypot(dx,dy),angle=normAngle(Math.atan2(dy,dx)-player.angle);
+      if(Math.abs(angle)>FOV*.75||distance<.1||raycast(Math.atan2(dy,dx)).dist<distance-.2)continue;
+      const sx=W*.5+Math.tan(angle)/Math.tan(FOV*.5)*W*.5,scale=H/(distance*.76),screenX=clamp(Math.floor(sx),0,W-1);
+      if(depth[screenX]<distance)continue;
+      if(sprite.type==="battery"){
+        const size=clamp(scale*.23,8,36),y=horizon+size*.58+Math.sin(now/200+sprite.x)*2;
+        ctx.save();ctx.shadowColor="#9cc5a6";ctx.shadowBlur=14;ctx.fillStyle="#829384";
+        ctx.fillRect(sx-size*.28,y,size*.56,size*.7);ctx.fillStyle="#c6c1a8";ctx.fillRect(sx-size*.09,y-size*.07,size*.18,size*.1);
+        ctx.fillStyle="#26362c";ctx.fillRect(sx-size*.05,y+size*.16,size*.1,size*.34);ctx.restore();
+      }else if(sprite.type==="sister")drawSister({sx,scale,distance},now,horizon);
+      else if(sprite.type==="monster")drawMonster({sx,scale,distance},now,horizon);
+      else{
+        const size=clamp(scale*.6,10,H),top=horizon-size*.45;
+        ctx.fillStyle="#10100f";ctx.fillRect(sx-size*.3,top,size*.6,size);
+        ctx.strokeStyle="#8b806d";ctx.lineWidth=2;ctx.strokeRect(sx-size*.3,top,size*.6,size);
+      }
+    }
+    const handX=W*.82+Math.sin(player.bob)*2,handY=H*.91;
+    ctx.fillStyle="#171816";ctx.beginPath();ctx.ellipse(handX,handY,W*.055,H*.045,-.2,0,Math.PI*2);ctx.fill();
+    ctx.save();ctx.translate(handX,handY);ctx.rotate(-.16);ctx.fillStyle="#292b26";ctx.fillRect(-W*.008,-H*.17,W*.032,H*.19);
+    ctx.fillStyle=flashlight?"#c3c0a5":"#56564e";ctx.fillRect(-W*.011,-H*.18,W*.038,H*.025);
+    if(flashlight){ctx.shadowColor="#e0d7b4";ctx.shadowBlur=13;ctx.fillStyle="#e1ddc2";ctx.fillRect(-W*.006,-H*.177,W*.028,H*.012);}
+    ctx.restore();ctx.restore();
+    if(fear>0){
+      const dark=fear*(finalHunt?.78:.4),red=fear*(finalHunt?.24:.08);
+      ctx.fillStyle=`rgba(0,0,0,${dark})`;ctx.fillRect(0,0,W,H);
+      ctx.fillStyle=`rgba(95,0,8,${red})`;ctx.fillRect(0,0,W,H);
+    }
+  }
+  function showEnding(won){
+    running=false;ended=true;document.exitPointerLock?.();
+    document.getElementById("endingTitle").textContent=won?"VOCÊ ENCONTROU LIA":"O GRITO SILENCIOU";
+    document.getElementById("endingText").textContent=won
+      ?"Você segura a mão da sua irmã e corre para fora do sótão. Atrás de vocês, dois olhos vermelhos desaparecem na escuridão. Pela primeira vez naquela noite, a voz de Lia está ao seu lado."
+      :"O sótão fica em silêncio. No escuro, a criatura ainda procura por alguém.";
+    endingEl.hidden=false;
+  }
+  function update(dt,now){
+    if(!running||ended)return;
+    if(messageTimer>0){messageTimer-=dt;if(messageTimer<=0)messageEl.style.opacity="0";}
+    ambientTimer-=dt;if(ambientTimer<=0){tone(65+Math.random()*35,.75,"triangle",.1,-40);tone(215,.2,"sine",.025,-150);ambientTimer=5+Math.random()*9;}
+    const moving=keys.has("w")||keys.has("a")||keys.has("s")||keys.has("d");
+    const sprint=keys.has("Shift")&&moving&&stamina>0;
+    stamina=clamp(stamina+(sprint?-34:21)*dt,0,100);
+    const speed=(sprint?2.45:1.55)*dt;
+    if(sprint&&stamina<40){breathTimer-=dt;if(breathTimer<=0){breathing((40-stamina)/40);breathTimer=1.5;}}
+    else breathTimer=0;
+    if(flashlight){
+      battery=Math.max(0,battery-.36*dt);
+      if(battery===0){flashlight=false;showMessage("A LANTERNA APAGOU. PROCURE UMA BATERIA.",3);tone(170,.4,"triangle",.12,-120);}
+    }
+    let dx=0,dy=0;
+    if(keys.has("w")){dx+=Math.cos(player.angle)*speed;dy+=Math.sin(player.angle)*speed;}
+    if(keys.has("s")){dx-=Math.cos(player.angle)*speed;dy-=Math.sin(player.angle)*speed;}
+    if(keys.has("a")){dx+=Math.cos(player.angle-Math.PI/2)*speed;dy+=Math.sin(player.angle-Math.PI/2)*speed;}
+    if(keys.has("d")){dx+=Math.cos(player.angle+Math.PI/2)*speed;dy+=Math.sin(player.angle+Math.PI/2)*speed;}
+    const magnitude=Math.hypot(dx,dy);if(magnitude>speed){dx*=speed/magnitude;dy*=speed/magnitude;}
+    if(dx||dy){move(player,dx,dy);player.bob+=dt*(sprint?15:9);}
+    const batteryNearby=batteries.find(item=>!item.found&&Math.hypot(player.x-item.x,player.y-item.y)<1);
+    const exitNearby=exits.find(item=>Math.hypot(player.x-(item.x+.5),player.y-(item.y+.5))<1.1);
+    const sisterNearby=!sister.found&&Math.hypot(player.x-sister.x,player.y-sister.y)<1.25;
+    if(batteryNearby)promptEl.textContent="PRESSIONE E PARA PEGAR A BATERIA";
+    else if(sisterNearby)promptEl.textContent="PRESSIONE E PARA ENCONTRAR LIA";
+    else if(exitNearby)promptEl.textContent=sister.found?"PRESSIONE E PARA ESCAPAR":"A ESCADA ESTÁ BLOQUEADA. ENCONTRE LIA.";
+    else promptEl.textContent="";
+    promptEl.style.opacity=promptEl.textContent?"1":"0";
+    monsterDistance=Math.hypot(player.x-monster.x,player.y-monster.y);
+    pathTimer-=dt;if(pathTimer<=0||!monsterPath){monsterPath=findMonsterPath();pathTimer=.22;}
+    if(monsterPath){
+      const vx=monsterPath.x-monster.x,vy=monsterPath.y-monster.y,distance=Math.hypot(vx,vy);
+      const huntSpeed=sister.found?2.3:1.75;
+      if(distance>.06)move(monster,vx/distance*Math.min(distance,huntSpeed*dt),vy/distance*Math.min(distance,huntSpeed*dt),.13);
+      monsterDistance=Math.hypot(player.x-monster.x,player.y-monster.y);
+      if(roarTimer>0)roarTimer-=dt;
+      if(monsterDistance<12&&roarTimer<=0){tone(48,.95,"sawtooth",.23,-30);tone(86,.7,"triangle",.1,-50);roarTimer=2.6+Math.random()*1.7;}
+      if(monsterDistance<.58)showEnding(false);
+    }
+    updateHud();
+  }
+  function frame(now){
+    const dt=Math.min(.05,(now-last)/1000||0);last=now;update(dt,now);
+    const danger=Number.isFinite(monsterDistance)?clamp((10-monsterDistance)/9,0,1):0;
+    const shake=danger*(sister.found?11:4);
+    if(shake)ctx.translate((Math.random()-.5)*shake*2,(Math.random()-.5)*shake*2);
+    draw(now);
+    if(shake)ctx.setTransform(1,0,0,1,0,0);
+    requestAnimationFrame(frame);
+  }
+  function requestLookLock(){
+    if(location.protocol==="file:"||!canvas.requestPointerLock)return;
+    const request=canvas.requestPointerLock();
+    if(request&&typeof request.catch==="function")request.catch(()=>showMessage("USE AS SETAS ← → PARA OLHAR",2.5));
+  }
+  function begin(){
+    running=true;ended=false;startEl.hidden=true;pauseEl.hidden=true;endingEl.hidden=true;last=performance.now();
+    startAudio();requestLookLock();
+  }
+  document.getElementById("begin").addEventListener("click",begin);
+  document.getElementById("resume").addEventListener("click",begin);
+  document.getElementById("restart").addEventListener("click",()=>location.reload());
+  document.addEventListener("pointerlockchange",()=>{pointerLocked=document.pointerLockElement===canvas;});
+  document.addEventListener("mousemove",event=>{if(pointerLocked&&running)player.angle+=event.movementX*.0024;});
+  document.addEventListener("keydown",event=>{
+    const key=event.key.toLowerCase();
+    if(key==="escape"||key==="p"){
+      event.preventDefault();
+      if(running){running=false;keys.clear();pauseEl.hidden=false;document.exitPointerLock?.();if(audio&&audio.state==="running")audio.suspend();}
+      else if(!pauseEl.hidden)begin();
+      return;
+    }
+    if(!running)return;
+    if(["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright"," "].includes(key))event.preventDefault();
+    if(key==="arrowleft")player.angle-=.09;
+    if(key==="arrowright")player.angle+=.09;
+    if(key==="arrowup")keys.add("w");
+    if(key==="arrowdown")keys.add("s");
+    keys.add(event.key==="Shift"?"Shift":key);
+    if(key==="f"&&!event.repeat){
+      if(!flashlight&&battery<=0)showMessage("SEM CARGA. TROQUE A BATERIA COM R.",2);
+      else{flashlight=!flashlight;tone(flashlight?500:220,.14,"triangle",.08,flashlight?100:-70);}
+    }
+    if(key==="r"&&!event.repeat){
+      if(spareBatteries<1)showMessage("VOCÊ NÃO TEM BATERIAS RESERVA.",1.8);
+      else if(battery>=100)showMessage("A LANTERNA JÁ ESTÁ CARREGADA.",1.8);
+      else{spareBatteries--;battery=Math.min(100,battery+55);flashlight=true;tone(360,.3,"triangle",.13,180);showMessage("BATERIA TROCADA.",1.5);}
+    }
+    if(key==="e"&&!event.repeat){
+      const nearbyBattery=batteries.find(item=>!item.found&&Math.hypot(player.x-item.x,player.y-item.y)<1);
+      const nearSister=!sister.found&&Math.hypot(player.x-sister.x,player.y-sister.y)<1.25;
+      const nearExit=exits.find(item=>Math.hypot(player.x-(item.x+.5),player.y-(item.y+.5))<1.1);
+      if(nearbyBattery){
+        nearbyBattery.found=true;spareBatteries++;tone(540,.2,"triangle",.12,160);
+        showMessage(`BATERIA ENCONTRADA · ${spareBatteries} DISPONÍVEL(IS) · USE R`,2.2);
+      }else if(nearSister){
+        sister.found=true;objectiveEl.textContent="FUJA DA CRIATURA · ENCONTRE UMA SAÍDA";
+        monsterPath=null;pathTimer=0;tone(42,1.3,"sawtooth",.42,-20);
+        showMessage("LIA! UMA SOMBRA SE MOVE ATRÁS DE VOCÊ. CORRA!",3.5);
+      }else if(nearExit){
+        if(sister.found)showEnding(true);else showMessage("ENCONTRE SUA IRMÃ ANTES DE ESCAPAR.",2);
+      }
+    }
+  });
+  document.addEventListener("keyup",event=>{keys.delete(event.key==="Shift"?"Shift":event.key.toLowerCase());});
+  canvas.addEventListener("click",()=>{if(running&&!pointerLocked)requestLookLock();});
+  updateHud();requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
